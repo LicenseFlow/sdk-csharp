@@ -57,6 +57,18 @@ namespace LicenseFlow.SDK
             return res;
         }
 
+        public async Task<dynamic> DeactivateAsync(string licenseKey)
+        {
+            var payload = new
+            {
+                license_key = licenseKey,
+                device_id = GetHardwareId()
+            };
+            var res = await PostAsync("functions/v1/deactivate-license", payload);
+            _cache.Clear(); // Clear cache
+            return res;
+        }
+
         private async Task<dynamic> PostAsync(string path, object payload)
         {
             var json = JsonConvert.SerializeObject(payload);
