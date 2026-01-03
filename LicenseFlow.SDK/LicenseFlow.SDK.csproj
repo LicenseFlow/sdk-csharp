@@ -5,10 +5,12 @@
     <Nullable>enable</Nullable>
     <AssemblyName>LicenseFlow.SDK</AssemblyName>
     <RootNamespace>LicenseFlow.SDK</RootNamespace>
+    <Version>2.0.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="6.35.0" />
+    <PackageReference Include="NSec.Cryptography" Version="24.4.0" />
   </ItemGroup>
 </Project>

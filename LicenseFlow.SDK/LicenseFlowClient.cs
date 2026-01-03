@@ -5,6 +5,8 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
+using NSec.Cryptography;
+using System.Linq;
 
 namespace LicenseFlow.SDK
 {
@@ -67,6 +69,100 @@ namespace LicenseFlow.SDK
             var res = await PostAsync("functions/v1/deactivate-license", payload);
             _cache.Clear(); // Clear cache
             return res;
+        }
+
+        public bool HasFeature(dynamic verification, string featureCode)
+        {
+            if (verification?.valid != true || verification?.entitlements == null) return false;
+            
+            var entitlements = verification.entitlements;
+            var ent = entitlements[featureCode];
+            if (ent == null) return false;
+
+            if (ent is bool b) return b;
+            if (ent is Newtonsoft.Json.Linq.JObject obj)
+            {
+                return obj["enabled"]?.Value<bool>() == true || obj["value"]?.Value<bool>() == true;
+            }
+            if (ent is string s)
+            {
+                return string.Equals(s, "true", StringComparison.OrdinalIgnoreCase);
+            }
+            return false;
+        }
+
+        public dynamic GetEntitlement(dynamic verification, string featureCode)
+        {
+            if (verification?.valid != true || verification?.entitlements == null) return null;
+            return verification.entitlements[featureCode];
+        }
+
+        public async Task<dynamic> CheckForUpdatesAsync(string productId, string currentVersion, string channel = "stable")
+        {
+            var url = $"functions/v1/release-management/latest?product_id={productId}&channel={channel}";
+            
+            var response = await _httpClient.GetAsync(url);
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound) return null;
+            
+            var responseString = await response.Content.ReadAsStringAsync();
+            var data = JsonConvert.DeserializeObject<dynamic>(responseString);
+
+            if (data == null || data.version == currentVersion) return null;
+            return data;
+        }
+
+        public async Task<dynamic> DownloadArtifactAsync(string licenseKey, string releaseId = null, string artifactId = null, string platform = null, string architecture = null)
+        {
+            var payload = new
+            {
+                license_key = licenseKey,
+                release_id = releaseId,
+                artifact_id = artifactId,
+                platform = platform,
+                architecture = architecture
+            };
+            return await PostAsync("functions/v1/artifact-download", payload);
+        }
+
+        public dynamic VerifyOfflineLicense(string licenseContent, string publicKeyHex)
+        {
+            var data = JsonConvert.DeserializeObject<dynamic>(licenseContent);
+            if (data?.license == null || data?.signature == null)
+            {
+                throw new Exception("Invalid offline license format");
+            }
+
+            string message = JsonConvert.SerializeObject(data.license);
+            byte[] signature = Convert.FromBase64String(data.signature.ToString());
+            byte[] publicKeyBytes = StringToByteArray(publicKeyHex);
+
+            var algorithm = SignatureAlgorithm.Ed25519;
+            var publicKey = PublicKey.Import(algorithm, publicKeyBytes, KeyBlobFormat.RawPublicKey);
+
+            if (!algorithm.Verify(publicKey, Encoding.UTF8.GetBytes(message), signature))
+            {
+                throw new Exception("Invalid offline license signature");
+            }
+
+            var license = data.license;
+            if (license.valid_until != null)
+            {
+                DateTime validUntil = DateTime.Parse(license.valid_until.ToString());
+                if (DateTime.UtcNow > validUntil.ToUniversalTime())
+                {
+                    throw new Exception("Offline license has expired");
+                }
+            }
+
+            return license;
+        }
+
+        private static byte[] StringToByteArray(string hex)
+        {
+            return Enumerable.Range(0, hex.Length)
+                             .Where(x => x % 2 == 0)
+                             .Select(x => Convert.ToByte(hex.Substring(x, 2), 16))
+                             .ToArray();
         }
 
         private async Task<dynamic> PostAsync(string path, object payload)
