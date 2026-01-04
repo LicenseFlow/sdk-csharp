@@ -27,7 +27,22 @@ namespace LicenseFlow.SDK
 
         public string GetHardwareId()
         {
-            return Environment.MachineName;
+            try
+            {
+                var mac = System.Net.NetworkInformation.NetworkInterface
+                    .GetAllNetworkInterfaces()
+                    .Where(nic => nic.OperationalStatus == System.Net.NetworkInformation.OperationalStatus.Up && nic.NetworkInterfaceType != System.Net.NetworkInformation.NetworkInterfaceType.Loopback)
+                    .Select(nic => nic.GetPhysicalAddress().ToString())
+                    .FirstOrDefault();
+
+                return !string.IsNullOrEmpty(mac) 
+                    ? $"{Environment.MachineName}-{mac}" 
+                    : Environment.MachineName;
+            }
+            catch
+            {
+                return Environment.MachineName;
+            }
         }
 
         public async Task<dynamic> ActivateAsync(string licenseKey, string deviceName)
