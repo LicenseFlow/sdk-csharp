@@ -45,28 +45,30 @@ namespace LicenseFlow.SDK
             }
         }
 
-        public async Task<dynamic> ActivateAsync(string licenseKey, string deviceName)
+        public async Task<dynamic> ActivateAsync(string licenseKey, string deviceName, string environmentId = null)
         {
             var payload = new
             {
                 license_key = licenseKey,
                 device_id = GetHardwareId(),
-                device_name = deviceName
+                device_name = deviceName,
+                environment_id = environmentId
             };
             return await PostAsync("functions/v1/activate-license", payload);
         }
 
-        public async Task<dynamic> VerifyAsync(string licenseKey)
+        public async Task<dynamic> VerifyAsync(string licenseKey, string environmentId = null)
         {
             var deviceId = GetHardwareId();
-            var cacheKey = $"verify:{licenseKey}:{deviceId}";
+            var cacheKey = $"verify:{licenseKey}:{deviceId}:{environmentId ?? "default"}";
 
             if (_cache.ContainsKey(cacheKey)) return _cache[cacheKey];
 
             var payload = new
             {
-                license_key = licenseKey,
-                device_id = deviceId
+                licenseKey = licenseKey,
+                deviceId = deviceId,
+                environmentId = environmentId
             };
 
             var res = await PostAsync("functions/v1/verify-license", payload);
@@ -74,12 +76,13 @@ namespace LicenseFlow.SDK
             return res;
         }
 
-        public async Task<dynamic> DeactivateAsync(string licenseKey)
+        public async Task<dynamic> DeactivateAsync(string licenseKey, string environmentId = null)
         {
             var payload = new
             {
                 license_key = licenseKey,
-                device_id = GetHardwareId()
+                device_id = GetHardwareId(),
+                environment_id = environmentId
             };
             var res = await PostAsync("functions/v1/deactivate-license", payload);
             _cache.Clear(); // Clear cache
