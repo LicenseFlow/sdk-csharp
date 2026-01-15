@@ -23,6 +23,7 @@ namespace LicenseFlow.SDK
             _jwtSecret = jwtSecret;
             _httpClient = new HttpClient { BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/") };
             _httpClient.DefaultRequestHeaders.Add("x-api-key", _apiKey);
+            _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _apiKey);
         }
 
         public string GetHardwareId()

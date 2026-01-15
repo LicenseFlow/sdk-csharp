@@ -15,7 +15,7 @@ using LicenseFlow.SDK;
 
 var client = new LicenseFlowClient(
     "https://your-project.supabase.co",
-    "your-api-key",
+    "lf_live_xxxxxxxxxxxx", // Generated from the SaaS platform
     "your-jwt-secret"
 );
 
