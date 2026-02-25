@@ -143,6 +143,51 @@ namespace LicenseFlow.SDK
             return await PostAsync("functions/v1/artifact-download", payload);
         }
 
+        // ── Floating License Lease Methods ──
+
+        public async Task<dynamic> CheckoutLicenseAsync(string licenseKey, int durationSeconds = 3600, string requesterId = null, string requesterType = "sdk", Dictionary<string, object> metadata = null)
+        {
+            var payload = new
+            {
+                license_key = licenseKey,
+                duration_seconds = durationSeconds,
+                requester_id = requesterId ?? GetHardwareId(),
+                requester_type = requesterType,
+                metadata
+            };
+            return await PostAsync("functions/v1/checkout-license", payload);
+        }
+
+        public async Task<dynamic> CheckinLicenseAsync(string leaseKey)
+        {
+            return await PostAsync("functions/v1/checkin-license", new { lease_key = leaseKey });
+        }
+
+        public async Task<dynamic> GetLeaseStatusAsync(string leaseKey)
+        {
+            return await PostAsync("functions/v1/lease-status", new { lease_key = leaseKey });
+        }
+
+        // ── Heartbeat ──
+
+        private System.Threading.Timer _heartbeatTimer;
+
+        public void StartHeartbeat(string licenseKey, int intervalMs = 60000)
+        {
+            StopHeartbeat();
+            _heartbeatTimer = new System.Threading.Timer(async _ =>
+            {
+                try { await VerifyAsync(licenseKey); }
+                catch (Exception ex) { Console.Error.WriteLine($"LicenseFlow heartbeat failed: {ex.Message}"); }
+            }, null, intervalMs, intervalMs);
+        }
+
+        public void StopHeartbeat()
+        {
+            _heartbeatTimer?.Dispose();
+            _heartbeatTimer = null;
+        }
+
         public dynamic VerifyOfflineLicense(string licenseContent, string publicKeyHex)
         {
             var data = JsonConvert.DeserializeObject<dynamic>(licenseContent);
