@@ -14,7 +14,7 @@ dotnet add package LicenseFlow.SDK
 using LicenseFlow.SDK;
 
 var client = new LicenseFlowClient(
-    "https://your-project.supabase.co",
+    "https://api.licenseflow.dev/v1",
     "lf_live_xxxxxxxxxxxx", // Generated from the SaaS platform
     "your-jwt-secret"
 );
