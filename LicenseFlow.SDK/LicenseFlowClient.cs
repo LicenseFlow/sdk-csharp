@@ -188,6 +188,84 @@ namespace LicenseFlow.SDK
             _heartbeatTimer = null;
         }
 
+        // ── Usage Recording ──
+
+        public async Task<dynamic> RecordUsageAsync(string licenseKey, string metricName, double value, bool increment = true, string environmentId = null)
+        {
+            var payload = new
+            {
+                license_key = licenseKey,
+                metric_name = metricName,
+                value = value,
+                increment = increment,
+                environment_id = environmentId
+            };
+            return await PostAsync("functions/v1/record-usage", payload);
+        }
+
+        // ── Credits / Usage-Based Billing ──
+
+        public async Task<dynamic> ConsumeCreditsAsync(int amount, string description = null, string productId = null, string currency = "credits", string referenceId = null, string referenceType = null)
+        {
+            var payload = new Dictionary<string, object> { { "amount", amount } };
+            if (description != null) payload["description"] = description;
+            if (productId != null) payload["product_id"] = productId;
+            if (currency != "credits") payload["currency"] = currency;
+            if (referenceId != null) payload["reference_id"] = referenceId;
+            if (referenceType != null) payload["reference_type"] = referenceType;
+            return await PostAsync("functions/v1/consume-credits", payload);
+        }
+
+        public async Task<dynamic> GetCreditsBalanceAsync(string productId = null, string currency = null)
+        {
+            var queryParams = new List<string>();
+            if (productId != null) queryParams.Add($"product_id={productId}");
+            if (currency != null) queryParams.Add($"currency={currency}");
+            var query = queryParams.Count > 0 ? "?" + string.Join("&", queryParams) : "";
+
+            var response = await _httpClient.GetAsync($"functions/v1/get-credit-balance{query}");
+            var responseString = await response.Content.ReadAsStringAsync();
+            return JsonConvert.DeserializeObject<dynamic>(responseString);
+        }
+
+        // ── Entitlements Management ──
+
+        public async Task<dynamic> ListEntitlementsAsync()
+        {
+            var response = await _httpClient.GetAsync("functions/v1/manage-entitlements");
+            var responseString = await response.Content.ReadAsStringAsync();
+            return JsonConvert.DeserializeObject<dynamic>(responseString);
+        }
+
+        public async Task<dynamic> CreateEntitlementAsync(string code, string name, string dataType = "boolean", string description = null)
+        {
+            var payload = new Dictionary<string, object>
+            {
+                { "code", code },
+                { "name", name },
+                { "data_type", dataType }
+            };
+            if (description != null) payload["description"] = description;
+            return await PostAsync("functions/v1/manage-entitlements", payload);
+        }
+
+        public async Task<dynamic> DeleteEntitlementAsync(string entitlementId)
+        {
+            var response = await _httpClient.DeleteAsync($"functions/v1/manage-entitlements/{entitlementId}");
+            var responseString = await response.Content.ReadAsStringAsync();
+            return JsonConvert.DeserializeObject<dynamic>(responseString);
+        }
+
+        public async Task<dynamic> AssignEntitlementToLicenseAsync(string entitlementId, string licenseId, Dictionary<string, object> value)
+        {
+            return await PostAsync($"functions/v1/manage-entitlements/{entitlementId}/assign-to-license", new { license_id = licenseId, value });
+        }
+
+        public async Task<dynamic> AssignEntitlementToPolicyAsync(string entitlementId, string policyId, Dictionary<string, object> defaultValue)
+        {
+            return await PostAsync($"functions/v1/manage-entitlements/{entitlementId}/assign-to-policy", new { policy_id = policyId, default_value = defaultValue });
+        }
+
         public dynamic VerifyOfflineLicense(string licenseContent, string publicKeyHex)
         {
             var data = JsonConvert.DeserializeObject<dynamic>(licenseContent);
