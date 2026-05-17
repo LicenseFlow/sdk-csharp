@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.1.0] - 2026-02-17
 
+## [2.2.0] - 2026-05-17
+
+### Added
+- `UpdateEntitlementAsync(id, updates)` for PUT-style entitlement edits (parity with JS/Python/PHP/Ruby)
+- `ValidateProofOffline(proof, secret)` HS256 JWT verification (parity with other SDKs)
+- `ConsumeCreditsAsync(...)` now accepts optional `metadata` dictionary
+
 ### Added
 - Environment scoping support: `environmentId` parameter in all license operations
 - Cache isolation between environments

@@ -5,7 +5,7 @@
     <Nullable>enable</Nullable>
     <AssemblyName>LicenseFlow.SDK</AssemblyName>
     <RootNamespace>LicenseFlow.SDK</RootNamespace>
-    <Version>2.1.0</Version>
+    <Version>2.2.0</Version>
     <Authors>LicenseFlow</Authors>
     <Company>LicenseFlow</Company>
     <Description>Official .NET SDK for LicenseFlow — Licensing, activation, entitlements, floating licenses, and distribution.</Description>
