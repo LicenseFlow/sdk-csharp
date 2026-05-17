@@ -205,7 +205,7 @@ namespace LicenseFlow.SDK
 
         // ── Credits / Usage-Based Billing ──
 
-        public async Task<dynamic> ConsumeCreditsAsync(int amount, string description = null, string productId = null, string currency = "credits", string referenceId = null, string referenceType = null)
+        public async Task<dynamic> ConsumeCreditsAsync(int amount, string description = null, string productId = null, string currency = "credits", string referenceId = null, string referenceType = null, IDictionary<string, object> metadata = null)
         {
             var payload = new Dictionary<string, object> { { "amount", amount } };
             if (description != null) payload["description"] = description;
@@ -213,6 +213,7 @@ namespace LicenseFlow.SDK
             if (currency != "credits") payload["currency"] = currency;
             if (referenceId != null) payload["reference_id"] = referenceId;
             if (referenceType != null) payload["reference_type"] = referenceType;
+            if (metadata != null) payload["metadata"] = metadata;
             return await PostAsync("functions/v1/consume-credits", payload);
         }
 
@@ -252,6 +253,15 @@ namespace LicenseFlow.SDK
         public async Task<dynamic> DeleteEntitlementAsync(string entitlementId)
         {
             var response = await _httpClient.DeleteAsync($"functions/v1/manage-entitlements/{entitlementId}");
+            var responseString = await response.Content.ReadAsStringAsync();
+            return JsonConvert.DeserializeObject<dynamic>(responseString);
+        }
+
+        public async Task<dynamic> UpdateEntitlementAsync(string entitlementId, IDictionary<string, object> updates)
+        {
+            var json = JsonConvert.SerializeObject(updates ?? new Dictionary<string, object>());
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+            var response = await _httpClient.PutAsync($"functions/v1/manage-entitlements/{entitlementId}", content);
             var responseString = await response.Content.ReadAsStringAsync();
             return JsonConvert.DeserializeObject<dynamic>(responseString);
         }
@@ -297,6 +307,52 @@ namespace LicenseFlow.SDK
             }
 
             return license;
+        }
+
+        /// <summary>
+        /// Validate a signed JWT proof token offline using HS256.
+        /// Returns an object with valid=true and payload on success.
+        /// </summary>
+        public dynamic ValidateProofOffline(string proof, string secret = null)
+        {
+            var key = secret ?? _jwtSecret;
+            if (string.IsNullOrEmpty(key))
+                throw new Exception("JWT secret is required for offline validation");
+
+            var parts = proof.Split('.');
+            if (parts.Length != 3)
+                return new { valid = false, error = "invalid token format" };
+
+            try
+            {
+                byte[] payloadBytes = Base64UrlDecode(parts[1]);
+                byte[] expectedSig = Base64UrlDecode(parts[2]);
+                var signingInput = parts[0] + "." + parts[1];
+                using (var hmac = new System.Security.Cryptography.HMACSHA256(Encoding.UTF8.GetBytes(key)))
+                {
+                    var computedSig = hmac.ComputeHash(Encoding.UTF8.GetBytes(signingInput));
+                    if (!System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(expectedSig, computedSig))
+                        return new { valid = false, error = "signature verification failed" };
+                }
+                var payloadJson = Encoding.UTF8.GetString(payloadBytes);
+                var payload = JsonConvert.DeserializeObject<dynamic>(payloadJson);
+                return new { valid = true, payload };
+            }
+            catch (Exception ex)
+            {
+                return new { valid = false, error = ex.Message };
+            }
+        }
+
+        private static byte[] Base64UrlDecode(string input)
+        {
+            string padded = input.Replace('-', '+').Replace('_', '/');
+            switch (padded.Length % 4)
+            {
+                case 2: padded += "=="; break;
+                case 3: padded += "="; break;
+            }
+            return Convert.FromBase64String(padded);
         }
 
         private static byte[] StringToByteArray(string hex)
