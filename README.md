@@ -39,6 +39,31 @@ Console.WriteLine($"Valid: {verification.valid}");
 
 ---
 
+## Entitlement Caching
+
+The `LicenseFlowClient` includes a built-in `EntitlementCache` that minimises API calls and enables offline operation.
+
+```csharp
+var client = new LicenseFlowClient(
+    baseUrl: "https://api.licenseflow.dev",
+    apiKey: "lf_live_xxxxxxxxxxxx",
+    jwtSecret: "your-jwt-secret",
+    cacheTtlSeconds: 300,       // Cache TTL — 5 minutes
+    offlineGraceSeconds: 259200 // Offline grace — 72 hours
+);
+
+// First call: fetches from API, populates cache
+var result = await client.VerifyAsync("XXXX-YYYY-ZZZZ-AAAA");
+
+// Subsequent calls within TTL: served from in-memory cache
+var result2 = await client.VerifyAsync("XXXX-YYYY-ZZZZ-AAAA");
+
+// During network outage within grace period: stale cache used
+// After grace expires: OfflineLicenseException thrown
+```
+
+---
+
 ## API Reference
 
 ### Core Methods
@@ -141,7 +166,8 @@ catch (Exception ex)
 
 - **HttpClient Factory** — Standard .NET networking with connection pooling
 - **Async/Await** — First-class asynchronous support throughout
-- **Thread-safe Caching** — In-memory verification cache
+- **Thread-safe Caching** — In-memory `EntitlementCache` with configurable TTL
+- **Offline Grace Period** — Continue operating up to 72h without connectivity
 - **Ed25519** — Cryptographic offline license verification
 
 ## License
@@ -151,5 +177,5 @@ MIT
 ## Links
 
 - 📖 [Documentation](https://docs.licenseflow.dev)
-- 🐛 [Issues](https://github.com/licenseflow/csharp-sdk/issues)
+- 🐛 [Issues](https://github.com/LicenseFlow/sdk-csharp/issues)
 - 🏠 [Homepage](https://licenseflow.dev)
