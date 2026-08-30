@@ -90,6 +90,35 @@ namespace LicenseFlow.SDK
             return res;
         }
 
+        /// <summary>
+        /// Identity-based (keyless) entitlement resolution.
+        /// Resolves everything an authenticated person is entitled to from their
+        /// email alone — licenses they own plus any seats assigned to them.
+        /// </summary>
+        public async Task<dynamic> ResolveForIdentityAsync(string email, string productId = null, string environmentId = null)
+        {
+            var cacheKey = $"identity:{email}:{productId ?? "all"}:{environmentId ?? "default"}";
+            if (_cache.ContainsKey(cacheKey))
+            {
+                return _cache[cacheKey];
+            }
+
+            var payload = new
+            {
+                email,
+                productId,
+                environmentId
+            };
+            var res = await PostAsync("functions/v1/resolve-entitlements", payload);
+
+            if (res?.resolved == true)
+            {
+                _cache[cacheKey] = res;
+            }
+
+            return res;
+        }
+
         public bool HasFeature(dynamic verification, string featureCode)
         {
             if (verification?.valid != true || verification?.entitlements == null) return false;
