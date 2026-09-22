@@ -414,7 +414,67 @@ namespace LicenseFlow.SDK
                 throw new LicenseFlowException(message, "UNKNOWN_ERROR", (int)response.StatusCode);
             }
 
-            return result;
+        /// <summary>
+        /// Track high-throughput usage telemetry with idempotency, dimensions, and quota enforcement.
+        /// </summary>
+        public async Task<UsageTrackResponse> TrackUsageAsync(UsageTrackOptions options)
+        {
+            var raw = await PostAsync("/functions/v1/record-usage", options);
+            return JsonConvert.DeserializeObject<UsageTrackResponse>(raw.ToString());
         }
+    }
+
+    public class UsageTrackOptions
+    {
+        [JsonProperty("license_key")]
+        public string LicenseKey { get; set; }
+
+        [JsonProperty("customer_id")]
+        public string CustomerId { get; set; }
+
+        [JsonProperty("event_name")]
+        public string FeatureName { get; set; }
+
+        [JsonProperty("quantity")]
+        public decimal Quantity { get; set; } = 1;
+
+        [JsonProperty("idempotency_key")]
+        public string IdempotencyKey { get; set; }
+
+        [JsonProperty("dimensions")]
+        public Dictionary<string, object> Dimensions { get; set; } = new();
+
+        [JsonProperty("metadata")]
+        public Dictionary<string, object> Metadata { get; set; } = new();
+
+        [JsonProperty("unit")]
+        public string Unit { get; set; } = "units";
+    }
+
+    public class UsageTrackResponse
+    {
+        [JsonProperty("success")]
+        public bool Success { get; set; }
+
+        [JsonProperty("status")]
+        public string Status { get; set; }
+
+        [JsonProperty("action")]
+        public string Action { get; set; }
+
+        [JsonProperty("current_usage")]
+        public decimal? CurrentUsage { get; set; }
+
+        [JsonProperty("quota_limit")]
+        public decimal? QuotaLimit { get; set; }
+
+        [JsonProperty("overage_units")]
+        public decimal? OverageUnits { get; set; }
+
+        [JsonProperty("enforcement_policy")]
+        public string EnforcementPolicy { get; set; }
+
+        [JsonProperty("is_duplicate")]
+        public bool IsDuplicate { get; set; }
     }
 }
