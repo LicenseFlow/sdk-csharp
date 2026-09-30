@@ -414,6 +414,9 @@ namespace LicenseFlow.SDK
                 throw new LicenseFlowException(message, "UNKNOWN_ERROR", (int)response.StatusCode);
             }
 
+            return result;
+        }
+
         /// <summary>
         /// Track high-throughput usage telemetry with idempotency, dimensions, and quota enforcement.
         /// </summary>
@@ -422,6 +425,183 @@ namespace LicenseFlow.SDK
             var raw = await PostAsync("/functions/v1/record-usage", options);
             return JsonConvert.DeserializeObject<UsageTrackResponse>(raw.ToString());
         }
+
+        // ── Stage 5: LicenseFlow Plus Runtime Control Plane ──────────────────
+
+        /// <summary>
+        /// Runtime Authorization Control Plane (POST /v1/authorize)
+        /// Evaluates whether a subject is entitled to perform an action on a protected resource.
+        /// </summary>
+        public async Task<AuthorizationDecision> AuthorizeAsync(AuthorizeOptions options)
+        {
+            var payload = new
+            {
+                subject = options.Subject,
+                resource = options.Resource,
+                action = options.Action ?? "*",
+                environment = options.Environment,
+                region = options.Region,
+                requested_units = options.RequestedUnits,
+                context = options.Context,
+                dry_run = options.DryRun
+            };
+
+            var raw = await PostAsync("/functions/v1/authorize", payload);
+            return JsonConvert.DeserializeObject<AuthorizationDecision>(raw.ToString());
+        }
+
+        /// <summary>
+        /// Check if a subject has explicit entitlement to access a resource.
+        /// </summary>
+        public async Task<bool> CheckEntitlementAsync(string subject, string resource, string action = "*")
+        {
+            try
+            {
+                var decision = await AuthorizeAsync(new AuthorizeOptions
+                {
+                    Subject = subject,
+                    Resource = resource,
+                    Action = action
+                });
+                return decision.Allowed;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Universal Metering Event Ingestion (POST /v1/meter)
+        /// </summary>
+        public async Task<UsageEventResult> RecordUsageEventAsync(UsageEventOptions options)
+        {
+            var payload = new
+            {
+                operation = "record",
+                meter_key = options.MeterKey,
+                subject = options.Subject,
+                resource = options.Resource,
+                units = options.Units,
+                dimensions = options.Dimensions ?? new Dictionary<string, object>(),
+                metadata = options.Metadata ?? new Dictionary<string, object>(),
+                idempotency_key = options.IdempotencyKey
+            };
+
+            var raw = await PostAsync("/functions/v1/meter", payload);
+            return JsonConvert.DeserializeObject<UsageEventResult>(raw.ToString());
+        }
+
+        /// <summary>
+        /// Emergency Revocation / Kill Switch Trigger
+        /// </summary>
+        public async Task<RevokeResult> RevokeAsync(string targetIdentifier, string reason, string level = "hard")
+        {
+            var payload = new
+            {
+                targetId = targetIdentifier,
+                level = level,
+                reason = reason
+            };
+
+            var raw = await PostAsync("/functions/v1/kill-switch", payload);
+            return JsonConvert.DeserializeObject<RevokeResult>(raw.ToString());
+        }
+    }
+
+    public class AuthorizeOptions
+    {
+        public string Subject { get; set; }
+        public string Resource { get; set; }
+        public string Action { get; set; } = "*";
+        public string Environment { get; set; }
+        public string Region { get; set; }
+        public int? RequestedUnits { get; set; }
+        public Dictionary<string, object> Context { get; set; }
+        public bool DryRun { get; set; } = false;
+    }
+
+    public class Diagnostics
+    {
+        [JsonProperty("precedence_step")]
+        public string PrecedenceStep { get; set; }
+
+        [JsonProperty("matched_policy")]
+        public string MatchedPolicy { get; set; }
+
+        [JsonProperty("risk_level")]
+        public string RiskLevel { get; set; }
+    }
+
+    public class AuthorizationDecision
+    {
+        [JsonProperty("allowed")]
+        public bool Allowed { get; set; }
+
+        [JsonProperty("decision")]
+        public string Decision { get; set; } // ALLOW, DENY, THROTTLE, REQUIRE_APPROVAL
+
+        [JsonProperty("code")]
+        public string Code { get; set; }
+
+        [JsonProperty("reason")]
+        public string Reason { get; set; }
+
+        [JsonProperty("approval_request_id")]
+        public string ApprovalRequestId { get; set; }
+
+        [JsonProperty("diagnostics")]
+        public Diagnostics Diagnostics { get; set; }
+
+        [JsonProperty("action")]
+        public string Action { get; set; }
+
+        [JsonProperty("dry_run")]
+        public bool DryRun { get; set; }
+
+        [JsonProperty("evaluated_at")]
+        public string EvaluatedAt { get; set; }
+
+        [JsonProperty("latency_ms")]
+        public double LatencyMs { get; set; }
+    }
+
+    public class UsageEventOptions
+    {
+        public string MeterKey { get; set; }
+        public string Subject { get; set; }
+        public string Resource { get; set; }
+        public int Units { get; set; }
+        public Dictionary<string, object> Dimensions { get; set; }
+        public Dictionary<string, object> Metadata { get; set; }
+        public string IdempotencyKey { get; set; }
+    }
+
+    public class UsageEventResult
+    {
+        [JsonProperty("success")]
+        public bool Success { get; set; }
+
+        [JsonProperty("event_id")]
+        public string EventId { get; set; }
+
+        [JsonProperty("credits_deducted")]
+        public decimal? CreditsDeducted { get; set; }
+
+        [JsonProperty("message")]
+        public string Message { get; set; }
+    }
+
+    public class RevokeResult
+    {
+        [JsonProperty("success")]
+        public bool Success { get; set; }
+
+        [JsonProperty("status")]
+        public string Status { get; set; }
+
+        [JsonProperty("reason")]
+        public string Reason { get; set; }
     }
 
     public class UsageTrackOptions
