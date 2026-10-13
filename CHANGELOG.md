@@ -5,6 +5,13 @@ All notable changes to the LicenseFlow .NET SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2026-10-13
+
+### Changed
+- Core calls (verify, activate, deactivate, checkout, lease status, offline, usage, entitlements, authorize) use the new canonical API addresses on api.licenseflow.dev, e.g. `/v1/licenses/verify`.
+- If the gateway does not recognise a new address it falls back once to the legacy path. Self-hosted and direct backend URLs keep using legacy paths.
+- Legacy paths remain supported indefinitely; no code changes are required.
+
 ## [2.1.0] - 2026-02-17
 
 ## [2.2.0] - 2026-05-17
