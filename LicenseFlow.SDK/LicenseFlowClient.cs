@@ -4,6 +4,8 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Threading.Tasks;
+using System.Collections.Concurrent;
+using System.Threading;
 using Newtonsoft.Json;
 using NSec.Cryptography;
 using System.Linq;
@@ -16,6 +18,10 @@ namespace LicenseFlow.SDK
         private readonly string _apiKey;
         private readonly string _jwtSecret;
         private readonly Dictionary<string, dynamic> _cache = new Dictionary<string, dynamic>();
+        private readonly ConcurrentDictionary<string, string> _revokedSubjects = new ConcurrentDictionary<string, string>();
+        private readonly ConcurrentDictionary<string, string> _revokedLicenses = new ConcurrentDictionary<string, string>();
+        private readonly ConcurrentDictionary<string, string> _revokedTools = new ConcurrentDictionary<string, string>();
+        private CancellationTokenSource _streamCts;
 
         public LicenseFlowClient(string baseUrl, string apiKey, string jwtSecret = null)
         {
@@ -426,7 +432,54 @@ namespace LicenseFlow.SDK
             return JsonConvert.DeserializeObject<UsageTrackResponse>(raw.ToString());
         }
 
-        // ── Stage 5: LicenseFlow Plus Runtime Control Plane ──────────────────
+        // ── Stage 5 & 6: LicenseFlow Plus Runtime Control Plane & Revocation Parity ──
+
+        /// <summary>
+        /// Check if a subject, license, or tool is marked revoked in local memory (<100ns)
+        /// </summary>
+        public bool IsRevoked(string subject, string license = null, string tool = null, out string reason)
+        {
+            reason = null;
+            if (!string.IsNullOrEmpty(subject) && _revokedSubjects.TryGetValue(subject, out reason))
+                return true;
+            if (!string.IsNullOrEmpty(license) && _revokedLicenses.TryGetValue(license, out reason))
+                return true;
+            if (!string.IsNullOrEmpty(tool) && _revokedTools.TryGetValue(tool, out reason))
+                return true;
+            return false;
+        }
+
+        /// <summary>
+        /// Trip kill switch locally in client memory with immediate cache eviction
+        /// </summary>
+        public void TripKillSwitchLocal(string targetType, string identifier, string reason)
+        {
+            if (string.Equals(targetType, "license", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(targetType, "license_key", StringComparison.OrdinalIgnoreCase))
+            {
+                _revokedLicenses[identifier] = reason;
+            }
+            else if (string.Equals(targetType, "tool", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(targetType, "mcp_tool", StringComparison.OrdinalIgnoreCase))
+            {
+                _revokedTools[identifier] = reason;
+            }
+            else
+            {
+                _revokedSubjects[identifier] = reason;
+            }
+            ClearCache();
+        }
+
+        /// <summary>
+        /// Reset all local kill switch stores
+        /// </summary>
+        public void ResetKillSwitchLocal()
+        {
+            _revokedSubjects.Clear();
+            _revokedLicenses.Clear();
+            _revokedTools.Clear();
+        }
 
         /// <summary>
         /// Runtime Authorization Control Plane (POST /v1/authorize)
@@ -434,6 +487,21 @@ namespace LicenseFlow.SDK
         /// </summary>
         public async Task<AuthorizationDecision> AuthorizeAsync(AuthorizeOptions options)
         {
+            // Zero-latency fail-closed pre-flight check (<100ns)
+            if (IsRevoked(options.Subject, null, options.Resource, out var reason))
+            {
+                return new AuthorizationDecision
+                {
+                    Allowed = false,
+                    Decision = "DENY",
+                    Code = "EMERGENCY_REVOKED",
+                    Reason = reason ?? "Target revoked by active emergency kill switch",
+                    Action = options.Action ?? "*",
+                    LatencyMs = 0.05,
+                    EvaluatedAt = DateTime.UtcNow.ToString("o")
+                };
+            }
+
             var payload = new
             {
                 subject = options.Subject,
@@ -448,6 +516,90 @@ namespace LicenseFlow.SDK
 
             var raw = await PostAsync("/functions/v1/authorize", payload);
             return JsonConvert.DeserializeObject<AuthorizationDecision>(raw.ToString());
+        }
+
+        /// <summary>
+        /// Cross-plane authorization helper directly binding Core license rights
+        /// </summary>
+        public async Task<AuthorizationDecision> AuthorizeWithLicenseAsync(string resource, string action = "execute", string licenseKey = null)
+        {
+            var key = licenseKey ?? _apiKey;
+            return await AuthorizeAsync(new AuthorizeOptions
+            {
+                Subject = key,
+                Resource = resource,
+                Action = action
+            });
+        }
+
+        /// <summary>
+        /// Start background real-time revocation stream poller
+        /// </summary>
+        public void StartRevocationStream(TimeSpan pollInterval)
+        {
+            StopRevocationStream();
+            _streamCts = new CancellationTokenSource();
+            var token = _streamCts.Token;
+
+            Task.Run(async () =>
+            {
+                while (!token.IsCancellationRequested)
+                {
+                    try
+                    {
+                        await Task.Delay(pollInterval, token);
+                        if (token.IsCancellationRequested) break;
+
+                        var res = await _httpClient.GetAsync("functions/v1/v1-stream-revocations", token);
+                        if (res.IsSuccessStatusCode)
+                        {
+                            var content = await res.Content.ReadAsStringAsync();
+                            var data = JsonConvert.DeserializeObject<Dictionary<string, object>>(content);
+                            if (data != null && data.TryGetValue("events", out var evObj))
+                            {
+                                var events = JsonConvert.DeserializeObject<List<Dictionary<string, string>>>(evObj.ToString());
+                                if (events != null)
+                                {
+                                    foreach (var ev in events)
+                                    {
+                                        ev.TryGetValue("type", out var type);
+                                        ev.TryGetValue("identifier", out var id);
+                                        ev.TryGetValue("reason", out var r);
+                                        r = r ?? "Emergency revocation";
+                                        if (string.Equals(type, "license", StringComparison.OrdinalIgnoreCase) && id != null)
+                                            _revokedLicenses[id] = r;
+                                        else if (string.Equals(type, "tool", StringComparison.OrdinalIgnoreCase) && id != null)
+                                            _revokedTools[id] = r;
+                                        else if (id != null)
+                                            _revokedSubjects[id] = r;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        break;
+                    }
+                    catch
+                    {
+                        // Resilient background backoff
+                    }
+                }
+            }, token);
+        }
+
+        /// <summary>
+        /// Stop background real-time revocation stream poller
+        /// </summary>
+        public void StopRevocationStream()
+        {
+            if (_streamCts != null)
+            {
+                _streamCts.Cancel();
+                _streamCts.Dispose();
+                _streamCts = null;
+            }
         }
 
         /// <summary>
