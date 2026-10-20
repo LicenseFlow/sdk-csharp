@@ -533,10 +533,11 @@ namespace LicenseFlow.SDK
         }
 
         /// <summary>
-        /// Start background real-time revocation stream poller
+        /// Start background real-time revocation stream poller with optional interval (defaults to 5 seconds)
         /// </summary>
-        public void StartRevocationStream(TimeSpan pollInterval)
+        public void StartRevocationStream(TimeSpan? pollInterval = null)
         {
+            var interval = pollInterval ?? TimeSpan.FromSeconds(5);
             StopRevocationStream();
             _streamCts = new CancellationTokenSource();
             var token = _streamCts.Token;
@@ -547,7 +548,7 @@ namespace LicenseFlow.SDK
                 {
                     try
                     {
-                        await Task.Delay(pollInterval, token);
+                        await Task.Delay(interval, token);
                         if (token.IsCancellationRequested) break;
 
                         var res = await _httpClient.GetAsync("functions/v1/v1-stream-revocations", token);
