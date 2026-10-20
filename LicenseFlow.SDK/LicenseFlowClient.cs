@@ -27,7 +27,7 @@ namespace LicenseFlow.SDK
         {
             _apiKey = apiKey;
             _jwtSecret = jwtSecret;
-            _httpClient = new HttpClient(new CanonicalEndpointsHandler()) { BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/") };
+            _httpClient = new HttpClient(new AuditLogHandler()) { BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/") };
             _httpClient.DefaultRequestHeaders.Add("x-api-key", _apiKey);
             _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _apiKey);
         }
