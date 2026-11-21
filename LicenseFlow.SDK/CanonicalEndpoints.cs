@@ -19,12 +19,14 @@ namespace LicenseFlow.SDK
             ["activate-license"] = "/v1/licenses/activate",
             ["deactivate-license"] = "/v1/licenses/deactivate",
             ["checkout-license"] = "/v1/licenses/checkout",
+            ["checkin-license"] = "/v1/licenses/checkin",
             ["lease-status"] = "/v1/licenses/lease-status",
             ["generate-offline-license"] = "/v1/licenses/offline",
             ["record-usage"] = "/v1/usage/record",
             ["resolve-entitlements"] = "/v1/entitlements/resolve",
             ["check-entitlement"] = "/v1/entitlements/check",
             ["authorize"] = "/v1/access/authorize",
+            ["mcp-gateway"] = "/v1/mcp-gateway",
         };
 
         private const string LegacyPrefix = "/functions/v1/";
